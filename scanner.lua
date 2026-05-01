@@ -1,5 +1,3 @@
--- what are you doing here?
-
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
@@ -12,25 +10,11 @@ local DROPS = {
 }
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1499068706716778709/FxSPdNCPab2vV14aNKLns3jwklz2OE7cZaw8Cpi3bQKCB5iEneGDT-hgWtC-O1nR9fLh"
+local RELAY_URL = "https://scribe-multitask-research.ngrok-free.dev/send"
 
-local RELAY_URL = "wss://scribe-multitask-research.ngrok-free.dev"
-
-local request = request
-local WebSocket = syn and syn.websocket or WebSocket
-
+local request = request or http_request or (syn and syn.request)
 local sent = {}
-local ws
 
-pcall(function()
-	if WebSocket and WebSocket.connect then
-		ws = WebSocket.connect(RELAY_URL)
-		print("[WebSocket] Connected")
-	else
-		warn("[WebSocket] Not available")
-	end
-end)
-
--- === ZONE SYSTEM ===
 local ZONES = {
 	Vector3.new(-5689.33, 103.83, -3266.03),
 	Vector3.new(-7988.94, 67.37, -3212.18),
@@ -66,6 +50,7 @@ local function inZone(pos)
 			return true
 		end
 	end
+
 	return false
 end
 
@@ -77,8 +62,9 @@ local function buildTeleportScript()
 	)
 end
 
-local function sendWebhookAndRelay(part)
-	if not part then return end
+local function sendWebhook(part)
+	if not request then return end
+	if not WEBHOOK_URL or WEBHOOK_URL == "" or WEBHOOK_URL == "PUT_NEW_WEBHOOK_HERE" then return end
 
 	local pos = part.Position
 	local teleportScript = buildTeleportScript()
@@ -87,8 +73,7 @@ local function sendWebhookAndRelay(part)
 		username = "Corpse Sniper",
 		embeds = {{
 			title = "Corpse Part Found",
-			description = "**Part:** `" .. part.Name .. "`\n" ..
-				"**Coords:** `" .. tostring(pos) .. "`",
+			description = "**Part:** `" .. part.Name .. "`\n**Coords:** `" .. tostring(pos) .. "`",
 			color = 65280,
 			fields = {
 				{
@@ -98,10 +83,7 @@ local function sendWebhookAndRelay(part)
 				},
 				{
 					name = "Coordinates",
-					value = string.format(
-						"X: %.2f | Y: %.2f | Z: %.2f",
-						pos.X, pos.Y, pos.Z
-					),
+					value = string.format("X: %.2f | Y: %.2f | Z: %.2f", pos.X, pos.Y, pos.Z),
 					inline = false
 				},
 				{
@@ -114,38 +96,54 @@ local function sendWebhookAndRelay(part)
 		}}
 	}
 
-	if request then
-		pcall(function()
-			request({
-				Url = WEBHOOK_URL,
-				Method = "POST",
-				Headers = {
-					["Content-Type"] = "application/json"
-				},
-				Body = HttpService:JSONEncode(payload)
-			})
+	pcall(function()
+		request({
+			Url = WEBHOOK_URL,
+			Method = "POST",
+			Headers = {
+				["Content-Type"] = "application/json"
+			},
+			Body = HttpService:JSONEncode(payload)
+		})
 
-			print("[Discord] Sent:", part.Name)
-		end)
+		print("[Discord] Sent:", part.Name)
+	end)
+end
+
+local function sendRelay(part)
+	if not request then
+		warn("[Relay] request not supported")
+		return
 	end
 
-	if ws then
-		pcall(function()
-			ws:Send(HttpService:JSONEncode({
-				type = "teleportData",
-				part = part.Name,
-				players = #Players:GetPlayers(),
-				max = Players.MaxPlayers,
-				tp = game.JobId,
-				placeId = game.PlaceId,
-				code = teleportScript
-			}))
+	local body = HttpService:JSONEncode({
+		part = part.Name,
+		players = #Players:GetPlayers(),
+		max = Players.MaxPlayers,
+		tp = game.JobId
+	})
 
-			print("[WebSocket] Sent:", part.Name)
-		end)
+	local success, err = pcall(function()
+		request({
+			Url = RELAY_URL,
+			Method = "POST",
+			Headers = {
+				["Content-Type"] = "application/json"
+			},
+			Body = body
+		})
+	end)
+
+	if success then
+		print("[Relay] Sent:", part.Name)
 	else
-		warn("[WebSocket] Not connected")
+		warn("[Relay] Failed:", err)
 	end
+end
+
+local function sendWebhookAndRelay(part)
+	sendWebhook(part)
+	sendRelay(part)
 end
 
 local function check(obj)
@@ -178,4 +176,4 @@ workspace.DescendantAdded:Connect(function(obj)
 	end)
 end)
 
-print("im working")
+print("Sender loaded - zone filter + relay mode")
