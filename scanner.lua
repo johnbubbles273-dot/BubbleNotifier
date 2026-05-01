@@ -1,9 +1,8 @@
--- testing
+-- what are you doing here?
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
--- === SETTINGS ===
 local DROPS = {
 	SaintsLeftArm = true,
 	SaintsRightArm = true,
@@ -12,10 +11,8 @@ local DROPS = {
 	SaintsRibcage = true,
 }
 
--- ⚠️ REPLACE THIS WITH A NEW WEBHOOK
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1499068706716778709/FxSPdNCPab2vV14aNKLns3jwklz2OE7cZaw8Cpi3bQKCB5iEneGDT-hgWtC-O1nR9fLh"
 
--- ✅ FIXED: no /send, using proper WSS root
 local RELAY_URL = "wss://scribe-multitask-research.ngrok-free.dev"
 
 local request = request
@@ -24,7 +21,6 @@ local WebSocket = syn and syn.websocket or WebSocket
 local sent = {}
 local ws
 
--- === WEBSOCKET CONNECT ===
 pcall(function()
 	if WebSocket and WebSocket.connect then
 		ws = WebSocket.connect(RELAY_URL)
@@ -73,7 +69,6 @@ local function inZone(pos)
 	return false
 end
 
--- === TELEPORT SCRIPT BUILDER ===
 local function buildTeleportScript()
 	return string.format(
 		[[game:GetService("TeleportService"):TeleportToPlaceInstance(%d, "%s", game.Players.LocalPlayer)]],
@@ -82,7 +77,6 @@ local function buildTeleportScript()
 	)
 end
 
--- === SEND WEBHOOK + WEBSOCKET ===
 local function sendWebhookAndRelay(part)
 	if not part then return end
 
@@ -120,7 +114,6 @@ local function sendWebhookAndRelay(part)
 		}}
 	}
 
-	-- Discord webhook
 	if request then
 		pcall(function()
 			request({
@@ -136,7 +129,6 @@ local function sendWebhookAndRelay(part)
 		end)
 	end
 
-	-- WebSocket relay
 	if ws then
 		pcall(function()
 			ws:Send(HttpService:JSONEncode({
@@ -156,7 +148,6 @@ local function sendWebhookAndRelay(part)
 	end
 end
 
--- === DETECTION ===
 local function check(obj)
 	if not obj:IsA("BasePart") then return end
 	if not DROPS[obj.Name] then return end
@@ -175,18 +166,16 @@ local function check(obj)
 	sendWebhookAndRelay(obj)
 end
 
--- Check existing parts
 for _, obj in ipairs(workspace:GetDescendants()) do
 	pcall(function()
 		check(obj)
 	end)
 end
 
--- Check new parts
 workspace.DescendantAdded:Connect(function(obj)
 	pcall(function()
 		check(obj)
 	end)
 end)
 
-print("Corpse Sniper sender loaded (WebSocket + Webhook working)")
+print("im working")
