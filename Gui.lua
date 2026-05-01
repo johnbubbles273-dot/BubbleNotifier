@@ -1,5 +1,4 @@
--- working gui
--- Bubble Receiver GUI + Logic (Enhanced)
+-- i know what you are.
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
