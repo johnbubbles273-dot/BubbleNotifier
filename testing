@@ -1,0 +1,41 @@
+-- you can go now
+
+local HttpService = game:GetService("HttpService")
+
+local RELAY_URL = "https://scribe-multitask-research.ngrok-free.dev/send"
+
+local request = request or http_request or (syn and syn.request)
+
+if not request then
+	warn("[RELAY TEST] request/http_request not supported")
+	return
+end
+
+local payload = {
+	part = "SaintsLeftArm",
+	players = 25,
+	max = 25,
+	tp = game.JobId
+}
+
+local body = HttpService:JSONEncode(payload)
+
+print("[RELAY TEST] Sending:", body)
+
+local success, result = pcall(function()
+	return request({
+		Url = RELAY_URL,
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/json"
+		},
+		Body = body
+	})
+end)
+
+if success then
+	print("[RELAY TEST] Sent successfully")
+	print(result and result.Body or "No response body")
+else
+	warn("[RELAY TEST] Failed:", result)
+end
