@@ -21,7 +21,7 @@ local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 local AUTO_JOIN_RETRY_DELAY = 3
 local STARTUP_AUTOJOIN_DELAY = 60
 
-local SPAM_JOIN_ATTEMPTS = 1200
+local SPAM_JOIN_ATTEMPTS = 120
 local SPAM_JOIN_DELAY = 0.01
 
 local autoJoinEnabled = false
@@ -73,8 +73,6 @@ local function loadSettings()
 
 			if ok and key then
 				menuKeybind = key
-			else
-				menuKeybind = Enum.KeyCode.RightAlt
 			end
 		end
 	end
@@ -109,8 +107,8 @@ topBar.BorderSizePixel = 0
 topBar.Parent = mainFrame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -270, 1, 0)
-title.Position = UDim2.new(0, 100, 0, 0)
+title.Size = UDim2.new(1, -180, 1, 0)
+title.Position = UDim2.new(0, 12, 0, 0)
 title.BackgroundTransparency = 1
 title.Text = "Bubble Notifier | Waiting..."
 title.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -140,7 +138,9 @@ end
 
 local function hideTeleportError()
 	pcall(function()
-		GuiService:ClearError()
+		if GuiService and GuiService.ClearError then
+			GuiService:ClearError()
+		end
 	end)
 end
 
@@ -166,105 +166,6 @@ TeleportService.TeleportInitFailed:Connect(function(_, teleportResult, errorMess
 		end
 	end)
 end)
-
-local function startAutoJoinLoop()
-	if autoJoinLoopRunning then return end
-
-	autoJoinLoopRunning = true
-
-	task.spawn(function()
-		while autoJoinEnabled do
-			task.wait(AUTO_JOIN_RETRY_DELAY)
-
-			if not autoJoinEnabled then
-				break
-			end
-
-			hideTeleportError()
-
-			if startupDelayActive then
-				continue
-			end
-
-			if autoJoinPaused then
-				continue
-			end
-
-			local topEntry = nil
-
-			for i = #autoJoinQueue, 1, -1 do
-				local item = autoJoinQueue[i]
-
-				if item
-					and item.jobId
-					and item.jobId ~= ""
-					and item.jobId ~= game.JobId
-				then
-					topEntry = item
-					break
-				end
-			end
-
-			if topEntry then
-				title.Text = "Bubble Notifier | Joining Top Entry..."
-				title.TextColor3 = Color3.fromRGB(200, 200, 200)
-
-				local success, err = pcall(function()
-					TeleportService:TeleportToPlaceInstance(game.PlaceId, topEntry.jobId, player)
-				end)
-
-				if not success then
-					hideTeleportError()
-					warn("[Bubble Notifier] Auto join attempt failed:", err)
-				end
-			else
-				title.Text = "Bubble Notifier | Connected"
-				title.TextColor3 = Color3.fromRGB(200, 200, 200)
-			end
-		end
-
-		autoJoinLoopRunning = false
-	end)
-end
-
-local function startStartupCooldown()
-	startupDelayActive = true
-	updateAutoJoinStatusBox()
-
-	task.spawn(function()
-		for i = STARTUP_AUTOJOIN_DELAY, 1, -1 do
-			if not autoJoinEnabled then
-				startupDelayActive = false
-				updateAutoJoinStatusBox()
-				return
-			end
-
-			title.Text = "Bubble Notifier | Join Delay: " .. i .. "s"
-			title.TextColor3 = Color3.fromRGB(200, 200, 200)
-
-			task.wait(1)
-		end
-
-		startupDelayActive = false
-		updateAutoJoinStatusBox()
-
-		title.Text = "Bubble Notifier | Connected To Backend API"
-	end)
-end
-
-task.defer(function()
-	if autoJoinEnabled then
-		startStartupCooldown()
-		startAutoJoinLoop()
-	end
-end)
-
-		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
-		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
-
-		startAutoJoinLoop()
-	end)
-end
 
 local function isSaintsHeldObject(obj)
 	if not obj then return false end
@@ -358,7 +259,7 @@ autoTab.Text = "Auto"
 autoTab.TextColor3 = Color3.fromRGB(150, 150, 150)
 autoTab.Font = Enum.Font.GothamMedium
 autoTab.TextSize = 13
-autoTab.Parent = 
+autoTab.Parent = sidebar
 
 local settingsTab = Instance.new("TextButton")
 settingsTab.Size = UDim2.new(1, 0, 0, 32)
@@ -368,7 +269,7 @@ settingsTab.Text = "Settings"
 settingsTab.TextColor3 = Color3.fromRGB(150, 150, 150)
 settingsTab.Font = Enum.Font.GothamMedium
 settingsTab.TextSize = 13
-settingsTab.Parent = 
+settingsTab.Parent = sidebar
 
 local serverListFrame = Instance.new("ScrollingFrame")
 serverListFrame.Size = UDim2.new(1, -105, 1, -56)
@@ -519,6 +420,101 @@ local function updateEntryHighlights(activeID)
 	end
 end
 
+local function getTopJoinEntry()
+	for i = #autoJoinQueue, 1, -1 do
+		local item = autoJoinQueue[i]
+
+		if item
+			and item.jobId
+			and item.jobId ~= ""
+			and item.jobId ~= game.JobId
+			and serverEntries[item.id]
+			and isAllowedPart(item.partName)
+			and isAllowedPlayerCount(item.playerCount)
+		then
+			return item
+		end
+	end
+
+	return nil
+end
+
+local function startAutoJoinLoop()
+	if autoJoinLoopRunning then return end
+
+	autoJoinLoopRunning = true
+
+	task.spawn(function()
+		while autoJoinEnabled do
+			task.wait(AUTO_JOIN_RETRY_DELAY)
+
+			if not autoJoinEnabled then
+				break
+			end
+
+			hideTeleportError()
+
+			if startupDelayActive then
+				continue
+			end
+
+			if autoJoinPaused then
+				continue
+			end
+
+			local topEntry = getTopJoinEntry()
+
+			if topEntry then
+				updateEntryHighlights(topEntry.id)
+
+				title.Text = "Bubble Notifier | Joining Top Entry..."
+				title.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+				local success, err = pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, topEntry.jobId, player)
+				end)
+
+				if not success then
+					hideTeleportError()
+					warn("[Bubble Notifier] Auto join attempt failed:", err)
+				end
+			else
+				updateEntryHighlights(nil)
+				title.Text = "Bubble Notifier | Connected"
+				title.TextColor3 = Color3.fromRGB(200, 200, 200)
+			end
+		end
+
+		autoJoinLoopRunning = false
+	end)
+end
+
+local function startStartupCooldown()
+	startupDelayActive = true
+	updateAutoJoinStatusBox()
+
+	task.spawn(function()
+		for i = STARTUP_AUTOJOIN_DELAY, 1, -1 do
+			if not autoJoinEnabled then
+				startupDelayActive = false
+				updateAutoJoinStatusBox()
+				return
+			end
+
+			title.Text = "Bubble Notifier | Join Delay: " .. i .. "s"
+			title.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+			task.wait(1)
+		end
+
+		startupDelayActive = false
+		updateAutoJoinStatusBox()
+
+		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
+		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
+	end)
+end
+
 local function updateSwitch(track, knob, enabled)
 	local trackColor = enabled and Color3.fromRGB(88, 101, 242) or Color3.fromRGB(45, 45, 48)
 	local knobColor = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(120, 120, 120)
@@ -548,20 +544,11 @@ autoJoinBtn.MouseButton1Click:Connect(function()
 	updateAutoJoinStatusBox()
 
 	if autoJoinEnabled then
-		if not startupDelayActive then
-			startStartupCooldown()
-		end
-
-		if autoJoinEnabled then
-	task.defer(function()
+		startStartupCooldown()
 		startAutoJoinLoop()
-	end)
-end
-		
 	else
 		startupDelayActive = false
 		updateEntryHighlights(nil)
-
 		title.Text = "Bubble Notifier | Connected To Backend API"
 		title.TextColor3 = Color3.fromRGB(200, 200, 200)
 	end
@@ -587,11 +574,6 @@ end)
 
 refreshAutoButtons()
 updateAutoJoinStatusBox()
-
-if autoJoinEnabled then
-	startStartupCooldown()
-	startAutoJoinLoop()
-end
 
 local dragging = false
 local dragStart = nil
@@ -808,9 +790,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	end
 
 	local function attemptJoin()
-		if not canJoin() then
-			return
-		end
+		if not canJoin() then return end
 
 		local success, err = pcall(function()
 			TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
@@ -827,13 +807,8 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	end)
 
 	spamBtn.MouseButton1Click:Connect(function()
-		if spamJoining then
-			return
-		end
-
-		if not canJoin() then
-			return
-		end
+		if spamJoining then return end
+		if not canJoin() then return end
 
 		spamJoining = true
 		spamBtn.Text = "0/120"
@@ -1036,6 +1011,13 @@ local function connectWebSocket()
 end
 
 task.spawn(connectWebSocket)
+
+task.defer(function()
+	if autoJoinEnabled then
+		startStartupCooldown()
+		startAutoJoinLoop()
+	end
+end)
 
 _G.BubbleReceiverRawTest = function(partName, count, max, jobId)
 	local raw = string.format(
