@@ -252,10 +252,12 @@ local function startStartupCooldown()
 	end)
 end
 
-if autoJoinEnabled then
-	startStartupCooldown()
-	startAutoJoinLoop()
-end
+task.defer(function()
+	if autoJoinEnabled then
+		startStartupCooldown()
+		startAutoJoinLoop()
+	end
+end)
 
 		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
 		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
