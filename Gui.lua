@@ -21,7 +21,7 @@ local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 local AUTO_JOIN_RETRY_DELAY = 3
 local STARTUP_AUTOJOIN_DELAY = 60
 
-local SPAM_JOIN_ATTEMPTS = 120
+local SPAM_JOIN_ATTEMPTS = 1200
 local SPAM_JOIN_DELAY = 0.01
 
 local autoJoinEnabled = false
