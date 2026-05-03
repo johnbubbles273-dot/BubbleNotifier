@@ -1,4 +1,4 @@
--- Full Bubble Notifier with REAL zone-based Saints pause, no scan spam
+-- i know what you are.
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
+
 while not player do
 	task.wait()
 	player = Players.LocalPlayer
@@ -17,9 +18,7 @@ local SETTINGS_FOLDER = "BubbleReceiver"
 local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 
 local AUTO_JOIN_RETRY_DELAY = 3
-local STARTUP_AUTOJOIN_DELAY = 3
-local ENTRY_LIFETIME = 60
-local FALLBACK_SCAN_DELAY = 5
+local STARTUP_AUTOJOIN_DELAY = 30
 
 local autoJoinEnabled = false
 local onlyLeftArm = false
@@ -29,69 +28,16 @@ local autoJoinLoopRunning = false
 local startupDelayActive = false
 local autoJoinQueue = {}
 
-local serverSaintsPresent = false
-local heldSaintsPresent = false
-
-local DROPS = {
-	SaintsLeftArm = true,
-	SaintsRightArm = true,
-	SaintsLeftLeg = true,
-	SaintsRightLeg = true,
-	SaintsRibcage = true,
-}
-
-local SAINTS_ZONES = {
-	Vector3.new(-5689.33, 103.83, -3266.03),
-	Vector3.new(-7988.94, 67.37, -3212.18),
-	Vector3.new(-4018.97, 45.23, -2762.06),
-	Vector3.new(-4412.94, 47.39, -1959.46),
-	Vector3.new(-3038.57, 47.52, -1783.68),
-	Vector3.new(-2192.09, 250.38, -3365.89),
-	Vector3.new(-2244.54, 53.78, -3613.92),
-	Vector3.new(-2376.34, 57.31, -3822.05),
-	Vector3.new(-1856.17, 42.47, -5014.21),
-	Vector3.new(-3283.54, 47.83, -5193.98),
-	Vector3.new(-3800.04, 242.86, -6001.51),
-	Vector3.new(-3934.53, 206.59, -5632.87),
-	Vector3.new(-4114.48, 65.89, -4982.86),
-	Vector3.new(-4312.44, 63.20, -4814.78),
-	Vector3.new(-4163.66, 47.17, -3985.48),
-	Vector3.new(-7115.17, -200.74, -5333.19),
-	Vector3.new(-7774.09, 49.42, -4513.27),
-}
-
-local ZONE_RADIUS = 100
-local Y_TOLERANCE = 50
-
-local function isSaintsHeldObject(obj)
-	return obj and obj:IsA("BasePart") and DROPS[obj.Name] == true
-end
-
-local function isInSaintsZone(pos)
-	for _, zone in ipairs(SAINTS_ZONES) do
-		local horizontalDist = (
-			Vector3.new(pos.X, 0, pos.Z) - Vector3.new(zone.X, 0, zone.Z)
-		).Magnitude
-
-		local yDiff = math.abs(pos.Y - zone.Y)
-
-		if horizontalDist <= ZONE_RADIUS and yDiff <= Y_TOLERANCE then
-			return true
-		end
-	end
-
-	return false
-end
-
 local function saveSettings()
 	if makefolder and isfolder and not isfolder(SETTINGS_FOLDER) then
 		makefolder(SETTINGS_FOLDER)
 	end
 
-	local data =
-		(autoJoinEnabled and "1" or "0") .. "," ..
-		(onlyLeftArm and "1" or "0") .. "," ..
-		(under15Players and "1" or "0")
+	local data = (autoJoinEnabled and "1" or "0")
+		.. ","
+		.. (onlyLeftArm and "1" or "0")
+		.. ","
+		.. (under15Players and "1" or "0")
 
 	pcall(function()
 		writefile(SETTINGS_FILE, data)
@@ -99,8 +45,13 @@ local function saveSettings()
 end
 
 local function loadSettings()
-	if not isfile or not readfile then return end
-	if not isfile(SETTINGS_FILE) then return end
+	if not isfile or not readfile then
+		return
+	end
+
+	if not isfile(SETTINGS_FILE) then
+		return
+	end
 
 	local success, data = pcall(function()
 		return readfile(SETTINGS_FILE)
@@ -108,6 +59,7 @@ local function loadSettings()
 
 	if success and data then
 		local a, b, c = data:match("([^,]+),([^,]+),?([^,]*)")
+
 		autoJoinEnabled = a == "1"
 		onlyLeftArm = b == "1"
 		under15Players = c == "1"
@@ -169,100 +121,6 @@ cooldownLabel.TextSize = 12
 cooldownLabel.TextXAlignment = Enum.TextXAlignment.Right
 cooldownLabel.Parent = topBar
 
-local function characterHasSaintsPart(char)
-	if not char then return false end
-
-	for _, obj in ipairs(char:GetDescendants()) do
-		if isSaintsHeldObject(obj) then
-			return true
-		end
-	end
-
-	return false
-end
-
-local function updateAutoJoinPause(reason)
-	local newState = heldSaintsPresent or serverSaintsPresent
-
-	if autoJoinPaused == newState then
-		return
-	end
-
-	autoJoinPaused = newState
-
-	if autoJoinPaused then
-		if serverSaintsPresent then
-			title.Text = "Bubble Notifier | Paused - Saints In Zone"
-		else
-			title.Text = "Bubble Notifier | Paused - Holding Part"
-		end
-
-		title.TextColor3 = Color3.fromRGB(255, 120, 120)
-		warn("[Bubble Notifier] Auto join paused:", reason or "Saints detected")
-	else
-		title.TextColor3 = Color3.fromRGB(200, 200, 200)
-		title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected To Backend API"
-		warn("[Bubble Notifier] Auto join resumed:", reason or "Saints removed")
-	end
-end
-
-local function refreshHeldState(char)
-	heldSaintsPresent = characterHasSaintsPart(char)
-	updateAutoJoinPause("Held part state changed")
-end
-
-local function refreshServerSaintsState()
-	local found = false
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if isSaintsHeldObject(obj) and isInSaintsZone(obj.Position) then
-			found = true
-			break
-		end
-	end
-
-	serverSaintsPresent = found
-	updateAutoJoinPause("Real Saints zone state changed")
-end
-
-local function monitorPlayerWorkspaceModel(char)
-	refreshHeldState(char)
-
-	char.DescendantAdded:Connect(function(obj)
-		if isSaintsHeldObject(obj) then
-			heldSaintsPresent = true
-			updateAutoJoinPause("Picked up " .. obj.Name)
-		end
-	end)
-
-	char.DescendantRemoving:Connect(function(obj)
-		if isSaintsHeldObject(obj) then
-			task.delay(0.1, function()
-				refreshHeldState(char)
-			end)
-		end
-	end)
-end
-
-workspace.DescendantAdded:Connect(function(obj)
-	if isSaintsHeldObject(obj) then
-		task.delay(0.1, refreshServerSaintsState)
-	end
-end)
-
-workspace.DescendantRemoving:Connect(function(obj)
-	if isSaintsHeldObject(obj) then
-		task.delay(0.1, refreshServerSaintsState)
-	end
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(FALLBACK_SCAN_DELAY)
-		refreshServerSaintsState()
-	end
-end)
-
 local function startStartupCooldown()
 	startupDelayActive = true
 	title.Text = "Bubble Notifier | Auto Join Delay"
@@ -276,14 +134,79 @@ local function startStartupCooldown()
 
 		cooldownLabel.Text = ""
 		startupDelayActive = false
-		updateAutoJoinPause("Startup auto join cooldown finished")
-
-		if not autoJoinPaused then
-			title.Text = "Bubble Notifier | Connected To Backend API"
-			title.TextColor3 = Color3.fromRGB(200, 200, 200)
-		end
+		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
+		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part"
+			or "Bubble Notifier | Connected To Backend API"
 
 		print("[Bubble Notifier] Startup auto join cooldown finished")
+	end)
+end
+
+if autoJoinEnabled then
+	startStartupCooldown()
+end
+
+local function isSaintsHeldObject(obj)
+	if not obj then
+		return false
+	end
+
+	return obj.Name:match("^Saints") ~= nil
+end
+
+local function characterHasSaintsPart(char)
+	if not char then
+		return false
+	end
+
+	for _, obj in ipairs(char:GetDescendants()) do
+		if isSaintsHeldObject(obj) then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function setAutoJoinPaused(state, reason)
+	if autoJoinPaused == state then
+		return
+	end
+
+	autoJoinPaused = state
+
+	if autoJoinPaused then
+		title.Text = "Bubble Notifier | Paused - Holding Part"
+		title.TextColor3 = Color3.fromRGB(255, 120, 120)
+		warn("[Bubble Notifier] Auto join paused:", reason or "Saints part detected")
+	else
+		title.TextColor3 = Color3.fromRGB(200, 200, 200)
+		title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay"
+			or "Bubble Notifier | Connected To Backend API"
+
+		warn("[Bubble Notifier] Auto join resumed:", reason or "Saints part removed")
+	end
+end
+
+local function refreshHeldState(char)
+	setAutoJoinPaused(characterHasSaintsPart(char), "Held part state changed")
+end
+
+local function monitorPlayerWorkspaceModel(char)
+	refreshHeldState(char)
+
+	char.DescendantAdded:Connect(function(obj)
+		if isSaintsHeldObject(obj) then
+			setAutoJoinPaused(true, "Picked up " .. obj.Name)
+		end
+	end)
+
+	char.DescendantRemoving:Connect(function(obj)
+		if isSaintsHeldObject(obj) then
+			task.defer(function()
+				refreshHeldState(char)
+			end)
+		end
 	end)
 end
 
@@ -292,18 +215,12 @@ if player.Character then
 end
 
 player.CharacterAdded:Connect(function(char)
-	heldSaintsPresent = false
+	autoJoinPaused = false
 	title.TextColor3 = Color3.fromRGB(200, 200, 200)
 	title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected"
+
 	monitorPlayerWorkspaceModel(char)
-	refreshServerSaintsState()
 end)
-
-refreshServerSaintsState()
-
-if autoJoinEnabled then
-	startStartupCooldown()
-end
 
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 85, 1, -36)
@@ -415,6 +332,7 @@ local function isAllowedPart(partName)
 	if onlyLeftArm then
 		return partName == "SaintsLeftArm"
 	end
+
 	return true
 end
 
@@ -422,6 +340,7 @@ local function isAllowedPlayerCount(playerCount)
 	if under15Players then
 		return tonumber(playerCount) and tonumber(playerCount) < 15
 	end
+
 	return true
 end
 
@@ -456,7 +375,9 @@ local function updateEntryHighlights(activeID)
 end
 
 local function startAutoJoinLoop()
-	if autoJoinLoopRunning then return end
+	if autoJoinLoopRunning then
+		return
+	end
 
 	autoJoinLoopRunning = true
 
@@ -474,7 +395,7 @@ local function startAutoJoinLoop()
 			end
 
 			if autoJoinPaused then
-				print("[Bubble Notifier] Auto Snipe Paused - Real Saints in zone or held")
+				print("[Bubble Notifier] Auto Snipe Paused, Holding Saints Part")
 				continue
 			end
 
@@ -498,10 +419,8 @@ local function startAutoJoinLoop()
 			else
 				updateEntryHighlights(nil)
 
-				if not autoJoinPaused and not startupDelayActive then
-					title.Text = "Bubble Notifier | Connected To Backend API"
-					title.TextColor3 = Color3.fromRGB(200, 200, 200)
-				end
+				title.Text = "Bubble Notifier | Connected"
+				title.TextColor3 = Color3.fromRGB(200, 200, 200)
 			end
 		end
 
@@ -515,12 +434,12 @@ local function updateSwitch(track, knob, enabled)
 	local knobPos = enabled and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
 
 	TweenService:Create(track, TweenInfo.new(0.15), {
-		BackgroundColor3 = trackColor
+		BackgroundColor3 = trackColor,
 	}):Play()
 
 	TweenService:Create(knob, TweenInfo.new(0.15), {
 		BackgroundColor3 = knobColor,
-		Position = knobPos
+		Position = knobPos,
 	}):Play()
 end
 
@@ -532,6 +451,7 @@ end
 
 autoJoinBtn.MouseButton1Click:Connect(function()
 	autoJoinEnabled = not autoJoinEnabled
+
 	saveSettings()
 	refreshAutoButtons()
 
@@ -543,6 +463,7 @@ end)
 
 leftArmBtn.MouseButton1Click:Connect(function()
 	onlyLeftArm = not onlyLeftArm
+
 	saveSettings()
 	refreshAutoButtons()
 
@@ -553,6 +474,7 @@ end)
 
 under15Btn.MouseButton1Click:Connect(function()
 	under15Players = not under15Players
+
 	saveSettings()
 	refreshAutoButtons()
 end)
@@ -598,11 +520,13 @@ local function updateTabs()
 	if currentTab == "Servers" then
 		serversTab.TextColor3 = Color3.fromRGB(255, 255, 255)
 		autoTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+
 		serverListFrame.Visible = true
 		autoFrame.Visible = false
 	else
 		serversTab.TextColor3 = Color3.fromRGB(150, 150, 150)
 		autoTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+
 		serverListFrame.Visible = false
 		autoFrame.Visible = true
 	end
@@ -667,7 +591,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	timerLabel.Size = UDim2.new(0, 60, 0, 14)
 	timerLabel.Position = UDim2.new(0, 115, 0, 29)
 	timerLabel.BackgroundTransparency = 1
-	timerLabel.Text = ENTRY_LIFETIME .. "s"
+	timerLabel.Text = "20s"
 	timerLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 	timerLabel.Font = Enum.Font.Gotham
 	timerLabel.TextSize = 12
@@ -693,12 +617,12 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 			return
 		end
 
-		refreshServerSaintsState()
-
 		if autoJoinPaused then
-			warn("[Bubble Notifier] Teleport blocked because real Saints part is in a zone or held")
-			title.Text = "Bubble Notifier | TP Blocked - Saints Detected"
+			warn("[Bubble Notifier] Teleport blocked because Saints part is held")
+
+			title.Text = "Bubble Notifier | TP Blocked - Holding Part"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
+
 			return
 		end
 
@@ -745,8 +669,11 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	end
 
 	task.spawn(function()
-		for secondsLeft = ENTRY_LIFETIME, 1, -1 do
-			if not entry or not entry.Parent then return end
+		for secondsLeft = 20, 1, -1 do
+			if not entry or not entry.Parent then
+				return
+			end
+
 			timerLabel.Text = tostring(secondsLeft) .. "s"
 			task.wait(1)
 		end
@@ -789,18 +716,16 @@ local function handleWebSocketMessage(msg)
 
 	local partName, playerCount, maxPlayers, jobId = parseRawMessage(msg)
 
-	if not partName then return end
+	if not partName then
+		return
+	end
 
 	createServerEntry(partName, jobId or "", playerCount or 0, maxPlayers or 25)
 
 	if startupDelayActive then
 		title.Text = "Bubble Notifier | Auto Join Delay"
 	elseif autoJoinPaused then
-		if serverSaintsPresent then
-			title.Text = "Bubble Notifier | Paused - Saints In Zone"
-		else
-			title.Text = "Bubble Notifier | Paused - Holding Part"
-		end
+		title.Text = "Bubble Notifier | Paused - Holding Part"
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
 	else
 		title.Text = "Bubble Notifier | Connected To Backend API"
@@ -843,8 +768,10 @@ local function connectWebSocket()
 	if not success or not socket then
 		warn("[Bubble Notifier] Connection failed:", result)
 		title.Text = "Bubble Notifier | Connection Failed"
+
 		task.wait(5)
 		connectWebSocket()
+
 		return
 	end
 
@@ -853,11 +780,7 @@ local function connectWebSocket()
 	if startupDelayActive then
 		title.Text = "Bubble Notifier | Auto Join Delay"
 	elseif autoJoinPaused then
-		if serverSaintsPresent then
-			title.Text = "Bubble Notifier | Paused - Saints In Zone"
-		else
-			title.Text = "Bubble Notifier | Paused - Holding Part"
-		end
+		title.Text = "Bubble Notifier | Paused - Holding Part"
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
 	else
 		title.Text = "Bubble Notifier | Connected To Backend API"
@@ -870,6 +793,7 @@ local function connectWebSocket()
 
 	socket.OnClose:Connect(function()
 		connected = false
+
 		title.Text = "Bubble Notifier | Disconnected"
 		title.TextColor3 = Color3.fromRGB(200, 200, 200)
 
