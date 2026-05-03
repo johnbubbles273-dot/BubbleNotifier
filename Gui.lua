@@ -1,4 +1,4 @@
--- wyd here?
+-- Full Bubble Notifier with REAL zone-based Saints pause, no scan spam
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -18,6 +18,8 @@ local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 
 local AUTO_JOIN_RETRY_DELAY = 3
 local STARTUP_AUTOJOIN_DELAY = 3
+local ENTRY_LIFETIME = 60
+local FALLBACK_SCAN_DELAY = 5
 
 local autoJoinEnabled = false
 local onlyLeftArm = false
@@ -62,8 +64,7 @@ local ZONE_RADIUS = 100
 local Y_TOLERANCE = 50
 
 local function isSaintsHeldObject(obj)
-	if not obj then return false end
-	return obj:IsA("BasePart") and DROPS[obj.Name] == true
+	return obj and obj:IsA("BasePart") and DROPS[obj.Name] == true
 end
 
 local function isInSaintsZone(pos)
@@ -181,7 +182,13 @@ local function characterHasSaintsPart(char)
 end
 
 local function updateAutoJoinPause(reason)
-	autoJoinPaused = heldSaintsPresent or serverSaintsPresent
+	local newState = heldSaintsPresent or serverSaintsPresent
+
+	if autoJoinPaused == newState then
+		return
+	end
+
+	autoJoinPaused = newState
 
 	if autoJoinPaused then
 		if serverSaintsPresent then
@@ -205,15 +212,16 @@ local function refreshHeldState(char)
 end
 
 local function refreshServerSaintsState()
-	serverSaintsPresent = false
+	local found = false
 
 	for _, obj in ipairs(workspace:GetDescendants()) do
 		if isSaintsHeldObject(obj) and isInSaintsZone(obj.Position) then
-			serverSaintsPresent = true
+			found = true
 			break
 		end
 	end
 
+	serverSaintsPresent = found
 	updateAutoJoinPause("Real Saints zone state changed")
 end
 
@@ -229,7 +237,7 @@ local function monitorPlayerWorkspaceModel(char)
 
 	char.DescendantRemoving:Connect(function(obj)
 		if isSaintsHeldObject(obj) then
-			task.defer(function()
+			task.delay(0.1, function()
 				refreshHeldState(char)
 			end)
 		end
@@ -238,17 +246,20 @@ end
 
 workspace.DescendantAdded:Connect(function(obj)
 	if isSaintsHeldObject(obj) then
-		task.defer(function()
-			refreshServerSaintsState()
-		end)
+		task.delay(0.1, refreshServerSaintsState)
 	end
 end)
 
 workspace.DescendantRemoving:Connect(function(obj)
 	if isSaintsHeldObject(obj) then
-		task.defer(function()
-			refreshServerSaintsState()
-		end)
+		task.delay(0.1, refreshServerSaintsState)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(FALLBACK_SCAN_DELAY)
+		refreshServerSaintsState()
 	end
 end)
 
@@ -266,6 +277,12 @@ local function startStartupCooldown()
 		cooldownLabel.Text = ""
 		startupDelayActive = false
 		updateAutoJoinPause("Startup auto join cooldown finished")
+
+		if not autoJoinPaused then
+			title.Text = "Bubble Notifier | Connected To Backend API"
+			title.TextColor3 = Color3.fromRGB(200, 200, 200)
+		end
+
 		print("[Bubble Notifier] Startup auto join cooldown finished")
 	end)
 end
@@ -451,8 +468,6 @@ local function startAutoJoinLoop()
 				break
 			end
 
-			refreshServerSaintsState()
-
 			if startupDelayActive then
 				print("[Bubble Notifier] Waiting startup cooldown")
 				continue
@@ -482,7 +497,11 @@ local function startAutoJoinLoop()
 				end
 			else
 				updateEntryHighlights(nil)
-				updateAutoJoinPause("No entries")
+
+				if not autoJoinPaused and not startupDelayActive then
+					title.Text = "Bubble Notifier | Connected To Backend API"
+					title.TextColor3 = Color3.fromRGB(200, 200, 200)
+				end
 			end
 		end
 
@@ -648,7 +667,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	timerLabel.Size = UDim2.new(0, 60, 0, 14)
 	timerLabel.Position = UDim2.new(0, 115, 0, 29)
 	timerLabel.BackgroundTransparency = 1
-	timerLabel.Text = "60s"
+	timerLabel.Text = ENTRY_LIFETIME .. "s"
 	timerLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 	timerLabel.Font = Enum.Font.Gotham
 	timerLabel.TextSize = 12
@@ -726,7 +745,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	end
 
 	task.spawn(function()
-		for secondsLeft = 60, 1, -1 do
+		for secondsLeft = ENTRY_LIFETIME, 1, -1 do
 			if not entry or not entry.Parent then return end
 			timerLabel.Text = tostring(secondsLeft) .. "s"
 			task.wait(1)
