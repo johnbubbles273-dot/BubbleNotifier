@@ -17,7 +17,7 @@ local SETTINGS_FOLDER = "BubbleReceiver"
 local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 
 local AUTO_JOIN_RETRY_DELAY = 3
-local STARTUP_AUTOJOIN_DELAY = 45
+local STARTUP_AUTOJOIN_DELAY = 60
 
 local autoJoinEnabled = false
 local onlyLeftArm = false
