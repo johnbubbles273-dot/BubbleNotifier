@@ -21,6 +21,9 @@ local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 local AUTO_JOIN_RETRY_DELAY = 3
 local STARTUP_AUTOJOIN_DELAY = 60
 
+local SPAM_JOIN_ATTEMPTS = 120
+local SPAM_JOIN_DELAY = 0.15
+
 local autoJoinEnabled = false
 local onlyLeftArm = false
 local under15Players = false
@@ -680,6 +683,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	serverIndex += 1
 
 	local uniqueID = partName .. "_" .. tostring(serverIndex)
+	local spamJoining = false
 
 	local entry = Instance.new("Frame")
 	entry.Name = uniqueID
@@ -693,7 +697,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Text = "Found: " .. partName
-	nameLabel.Size = UDim2.new(1, -90, 0, 18)
+	nameLabel.Size = UDim2.new(1, -150, 0, 18)
 	nameLabel.Position = UDim2.new(0, 15, 0, 8)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.TextColor3 = Color3.new(1, 1, 1)
@@ -703,7 +707,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	nameLabel.Parent = entry
 
 	local countLabel = Instance.new("TextLabel")
-	countLabel.Size = UDim2.new(1, -90, 0, 14)
+	countLabel.Size = UDim2.new(1, -150, 0, 14)
 	countLabel.Position = UDim2.new(0, 15, 0, 29)
 	countLabel.BackgroundTransparency = 1
 	countLabel.Text = "Players: " .. playerCount .. " / " .. maxPlayers
@@ -724,6 +728,19 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	timerLabel.TextXAlignment = Enum.TextXAlignment.Left
 	timerLabel.Parent = entry
 
+	local spamBtn = Instance.new("TextButton")
+	spamBtn.Size = UDim2.new(0, 55, 0, 28)
+	spamBtn.Position = UDim2.new(1, -125, 0.5, -14)
+	spamBtn.BackgroundColor3 = Color3.fromRGB(220, 55, 55)
+	spamBtn.BorderSizePixel = 0
+	spamBtn.Text = "Spam"
+	spamBtn.TextColor3 = Color3.new(1, 1, 1)
+	spamBtn.Font = Enum.Font.GothamBold
+	spamBtn.TextSize = 12
+	spamBtn.Parent = entry
+
+	Instance.new("UICorner", spamBtn).CornerRadius = UDim.new(0, 8)
+
 	local joinBtn = Instance.new("TextButton")
 	joinBtn.Size = UDim2.new(0, 55, 0, 28)
 	joinBtn.Position = UDim2.new(1, -65, 0.5, -14)
@@ -737,28 +754,36 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 
 	Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 
-	joinBtn.MouseButton1Click:Connect(function()
+	local function canJoin()
 		if not jobId or jobId == "" then
 			warn("[Bubble Notifier] No valid jobId for:", partName)
-			return
+			return false
 		end
 
 		if jobId == game.JobId then
 			warn("[Bubble Notifier] Teleport blocked because this is the same server")
 			title.Text = "Bubble Notifier | Already In Server"
 			title.TextColor3 = Color3.fromRGB(255, 180, 80)
-			return
+			return false
 		end
 
 		if autoJoinPaused then
 			warn("[Bubble Notifier] Teleport blocked because Saints part is held")
 			title.Text = "Bubble Notifier | TP Blocked - Holding Part"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
-			return
+			return false
 		end
 
 		if not isAllowedPart(partName) then
 			warn("[Bubble Notifier] Blocked teleport due to part filter:", partName)
+			return false
+		end
+
+		return true
+	end
+
+	local function attemptJoin()
+		if not canJoin() then
 			return
 		end
 
@@ -772,6 +797,67 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 			hideTeleportError()
 			warn("[Bubble Notifier] Teleport failed:", err)
 		end
+	end
+
+	joinBtn.MouseButton1Click:Connect(function()
+		attemptJoin()
+	end)
+
+	spamBtn.MouseButton1Click:Connect(function()
+		if spamJoining then
+			return
+		end
+
+		if not canJoin() then
+			return
+		end
+
+		spamJoining = true
+		spamBtn.Text = "0/120"
+		spamBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
+
+		task.spawn(function()
+			for i = 1, SPAM_JOIN_ATTEMPTS do
+				if not spamJoining then
+					break
+				end
+
+				if not entry or not entry.Parent then
+					break
+				end
+
+				if not canJoin() then
+					break
+				end
+
+				spamBtn.Text = tostring(i) .. "/120"
+				title.Text = "Bubble Notifier | Spam Joining " .. tostring(i) .. "/120"
+				title.TextColor3 = Color3.fromRGB(255, 180, 80)
+
+				local success, err = pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
+				end)
+
+				if not success then
+					hideTeleportError()
+					warn("[Bubble Notifier] Spam join failed:", err)
+				end
+
+				task.wait(SPAM_JOIN_DELAY)
+			end
+
+			spamJoining = false
+
+			if spamBtn and spamBtn.Parent then
+				spamBtn.Text = "Spam"
+				spamBtn.BackgroundColor3 = Color3.fromRGB(220, 55, 55)
+			end
+
+			if title and title.Parent then
+				title.Text = "Bubble Notifier | Spam Join Finished"
+				title.TextColor3 = Color3.fromRGB(200, 200, 200)
+			end
+		end)
 	end)
 
 	serverEntries[uniqueID] = {
@@ -807,6 +893,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 			task.wait(1)
 		end
 
+		spamJoining = false
 		serverEntries[uniqueID] = nil
 		removeFromAutoJoinQueue(uniqueID)
 
