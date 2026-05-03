@@ -794,7 +794,26 @@ local function handleWebSocketMessage(msg)
 
 	local partName, playerCount, maxPlayers, jobId = parseRawMessage(msg)
 
-	if not partName then return end
+	if not partName then
+		return
+	end
+
+	-- 🔒 Ignore same server
+	if jobId and jobId ~= "" and jobId == game.JobId then
+		print("[Bubble Notifier] Ignored same-server part:", partName, jobId)
+
+		if startupDelayActive then
+			title.Text = "Bubble Notifier | Auto Join Delay"
+		elseif autoJoinPaused then
+			title.Text = "Bubble Notifier | Paused - Holding Part"
+			title.TextColor3 = Color3.fromRGB(255, 120, 120)
+		else
+			title.Text = "Bubble Notifier | Ignored Same Server"
+			title.TextColor3 = Color3.fromRGB(200, 200, 200)
+		end
+
+		return
+	end
 
 	createServerEntry(partName, jobId or "", playerCount or 0, maxPlayers or 25)
 
