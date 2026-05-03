@@ -1,4 +1,4 @@
--- i know what you are.
+-- Full Bubble Notifier with Saints-in-server pause
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -17,7 +17,7 @@ local SETTINGS_FOLDER = "BubbleReceiver"
 local SETTINGS_FILE = SETTINGS_FOLDER .. "/Settings.txt"
 
 local AUTO_JOIN_RETRY_DELAY = 3
-local STARTUP_AUTOJOIN_DELAY = 30
+local STARTUP_AUTOJOIN_DELAY = 3
 
 local autoJoinEnabled = false
 local onlyLeftArm = false
@@ -26,6 +26,9 @@ local autoJoinPaused = false
 local autoJoinLoopRunning = false
 local startupDelayActive = false
 local autoJoinQueue = {}
+
+local serverSaintsPresent = false
+local heldSaintsPresent = false
 
 local function saveSettings()
 	if makefolder and isfolder and not isfolder(SETTINGS_FOLDER) then
@@ -113,29 +116,6 @@ cooldownLabel.TextSize = 12
 cooldownLabel.TextXAlignment = Enum.TextXAlignment.Right
 cooldownLabel.Parent = topBar
 
-local function startStartupCooldown()
-	startupDelayActive = true
-	title.Text = "Bubble Notifier | Auto Join Delay"
-	title.TextColor3 = Color3.fromRGB(200, 200, 200)
-
-	task.spawn(function()
-		for i = STARTUP_AUTOJOIN_DELAY, 1, -1 do
-			cooldownLabel.Text = "Wait: " .. i .. "s"
-			task.wait(1)
-		end
-
-		cooldownLabel.Text = ""
-		startupDelayActive = false
-		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
-		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
-		print("[Bubble Notifier] Startup auto join cooldown finished")
-	end)
-end
-
-if autoJoinEnabled then
-	startStartupCooldown()
-end
-
 local function isSaintsHeldObject(obj)
 	if not obj then return false end
 	return obj.Name:match("^Saints") ~= nil
@@ -153,24 +133,41 @@ local function characterHasSaintsPart(char)
 	return false
 end
 
-local function setAutoJoinPaused(state, reason)
-	if autoJoinPaused == state then return end
-
-	autoJoinPaused = state
+local function updateAutoJoinPause(reason)
+	autoJoinPaused = heldSaintsPresent or serverSaintsPresent
 
 	if autoJoinPaused then
-		title.Text = "Bubble Notifier | Paused - Holding Part"
+		if serverSaintsPresent then
+			title.Text = "Bubble Notifier | Paused - Saints In Server"
+		else
+			title.Text = "Bubble Notifier | Paused - Holding Part"
+		end
+
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
-		warn("[Bubble Notifier] Auto join paused:", reason or "Saints part detected")
+		warn("[Bubble Notifier] Auto join paused:", reason or "Saints detected")
 	else
 		title.TextColor3 = Color3.fromRGB(200, 200, 200)
 		title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected To Backend API"
-		warn("[Bubble Notifier] Auto join resumed:", reason or "Saints part removed")
+		warn("[Bubble Notifier] Auto join resumed:", reason or "Saints removed")
 	end
 end
 
 local function refreshHeldState(char)
-	setAutoJoinPaused(characterHasSaintsPart(char), "Held part state changed")
+	heldSaintsPresent = characterHasSaintsPart(char)
+	updateAutoJoinPause("Held part state changed")
+end
+
+local function refreshServerSaintsState()
+	serverSaintsPresent = false
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if isSaintsHeldObject(obj) then
+			serverSaintsPresent = true
+			break
+		end
+	end
+
+	updateAutoJoinPause("Server Saints state changed")
 end
 
 local function monitorPlayerWorkspaceModel(char)
@@ -178,7 +175,8 @@ local function monitorPlayerWorkspaceModel(char)
 
 	char.DescendantAdded:Connect(function(obj)
 		if isSaintsHeldObject(obj) then
-			setAutoJoinPaused(true, "Picked up " .. obj.Name)
+			heldSaintsPresent = true
+			updateAutoJoinPause("Picked up " .. obj.Name)
 		end
 	end)
 
@@ -191,16 +189,56 @@ local function monitorPlayerWorkspaceModel(char)
 	end)
 end
 
+workspace.DescendantAdded:Connect(function(obj)
+	if isSaintsHeldObject(obj) then
+		serverSaintsPresent = true
+		updateAutoJoinPause("Saints part appeared in server: " .. obj.Name)
+	end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+	if isSaintsHeldObject(obj) then
+		task.defer(function()
+			refreshServerSaintsState()
+		end)
+	end
+end)
+
+local function startStartupCooldown()
+	startupDelayActive = true
+	title.Text = "Bubble Notifier | Auto Join Delay"
+	title.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+	task.spawn(function()
+		for i = STARTUP_AUTOJOIN_DELAY, 1, -1 do
+			cooldownLabel.Text = "Wait: " .. i .. "s"
+			task.wait(1)
+		end
+
+		cooldownLabel.Text = ""
+		startupDelayActive = false
+		updateAutoJoinPause("Startup auto join cooldown finished")
+		print("[Bubble Notifier] Startup auto join cooldown finished")
+	end)
+end
+
 if player.Character then
 	monitorPlayerWorkspaceModel(player.Character)
 end
 
 player.CharacterAdded:Connect(function(char)
-	autoJoinPaused = false
+	heldSaintsPresent = false
 	title.TextColor3 = Color3.fromRGB(200, 200, 200)
 	title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected"
 	monitorPlayerWorkspaceModel(char)
+	refreshServerSaintsState()
 end)
+
+refreshServerSaintsState()
+
+if autoJoinEnabled then
+	startStartupCooldown()
+end
 
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 85, 1, -36)
@@ -371,7 +409,7 @@ local function startAutoJoinLoop()
 			end
 
 			if autoJoinPaused then
-				print("[Bubble Notifier] Auto Snipe Paused, Holding Saints Part")
+				print("[Bubble Notifier] Auto Snipe Paused - Saints detected")
 				continue
 			end
 
@@ -394,8 +432,7 @@ local function startAutoJoinLoop()
 				end
 			else
 				updateEntryHighlights(nil)
-				title.Text = "Bubble Notifier | Connected"
-				title.TextColor3 = Color3.fromRGB(200, 200, 200)
+				updateAutoJoinPause("No entries")
 			end
 		end
 
@@ -588,8 +625,8 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 		end
 
 		if autoJoinPaused then
-			warn("[Bubble Notifier] Teleport blocked because Saints part is held")
-			title.Text = "Bubble Notifier | TP Blocked - Holding Part"
+			warn("[Bubble Notifier] Teleport blocked because Saints part exists")
+			title.Text = "Bubble Notifier | TP Blocked - Saints Detected"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
 			return
 		end
@@ -688,7 +725,11 @@ local function handleWebSocketMessage(msg)
 	if startupDelayActive then
 		title.Text = "Bubble Notifier | Auto Join Delay"
 	elseif autoJoinPaused then
-		title.Text = "Bubble Notifier | Paused - Holding Part"
+		if serverSaintsPresent then
+			title.Text = "Bubble Notifier | Paused - Saints In Server"
+		else
+			title.Text = "Bubble Notifier | Paused - Holding Part"
+		end
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
 	else
 		title.Text = "Bubble Notifier | Connected To Backend API"
@@ -741,7 +782,11 @@ local function connectWebSocket()
 	if startupDelayActive then
 		title.Text = "Bubble Notifier | Auto Join Delay"
 	elseif autoJoinPaused then
-		title.Text = "Bubble Notifier | Paused - Holding Part"
+		if serverSaintsPresent then
+			title.Text = "Bubble Notifier | Paused - Saints In Server"
+		else
+			title.Text = "Bubble Notifier | Paused - Holding Part"
+		end
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
 	else
 		title.Text = "Bubble Notifier | Connected To Backend API"
