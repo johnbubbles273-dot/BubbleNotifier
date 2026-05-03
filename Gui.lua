@@ -1,4 +1,4 @@
--- Full Bubble Notifier with Saints-in-server pause
+-- Full Bubble Notifier with zone-based Saints-in-server pause
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -29,6 +29,62 @@ local autoJoinQueue = {}
 
 local serverSaintsPresent = false
 local heldSaintsPresent = false
+
+local SAINTS_ZONES = {
+	Vector3.new(-5689.33, 103.83, -3266.03),
+	Vector3.new(-7988.94, 67.37, -3212.18),
+	Vector3.new(-4018.97, 45.23, -2762.06),
+	Vector3.new(-4412.94, 47.39, -1959.46),
+	Vector3.new(-3038.57, 47.52, -1783.68),
+	Vector3.new(-2192.09, 250.38, -3365.89),
+	Vector3.new(-2244.54, 53.78, -3613.92),
+	Vector3.new(-2376.34, 57.31, -3822.05),
+	Vector3.new(-1856.17, 42.47, -5014.21),
+	Vector3.new(-3283.54, 47.83, -5193.98),
+	Vector3.new(-3800.04, 242.86, -6001.51),
+	Vector3.new(-3934.53, 206.59, -5632.87),
+	Vector3.new(-4114.48, 65.89, -4982.86),
+	Vector3.new(-4312.44, 63.20, -4814.78),
+	Vector3.new(-4163.66, 47.17, -3985.48),
+	Vector3.new(-7115.17, -200.74, -5333.19),
+	Vector3.new(-7774.09, 49.42, -4513.27),
+}
+
+local ZONE_RADIUS = 250
+
+local function isInSaintsZone(pos)
+	for _, zone in ipairs(SAINTS_ZONES) do
+		if (pos - zone).Magnitude <= ZONE_RADIUS then
+			return true
+		end
+	end
+	return false
+end
+
+local function getObjectPosition(obj)
+	if not obj then return nil end
+
+	if obj:IsA("BasePart") then
+		return obj.Position
+	end
+
+	if obj:IsA("Model") then
+		if obj.PrimaryPart then
+			return obj.PrimaryPart.Position
+		end
+
+		local part = obj:FindFirstChildWhichIsA("BasePart", true)
+		if part then
+			return part.Position
+		end
+	end
+
+	if obj.Parent and obj.Parent ~= workspace then
+		return getObjectPosition(obj.Parent)
+	end
+
+	return nil
+end
 
 local function saveSettings()
 	if makefolder and isfolder and not isfolder(SETTINGS_FOLDER) then
@@ -138,7 +194,7 @@ local function updateAutoJoinPause(reason)
 
 	if autoJoinPaused then
 		if serverSaintsPresent then
-			title.Text = "Bubble Notifier | Paused - Saints In Server"
+			title.Text = "Bubble Notifier | Paused - Saints In Zone"
 		else
 			title.Text = "Bubble Notifier | Paused - Holding Part"
 		end
@@ -162,12 +218,16 @@ local function refreshServerSaintsState()
 
 	for _, obj in ipairs(workspace:GetDescendants()) do
 		if isSaintsHeldObject(obj) then
-			serverSaintsPresent = true
-			break
+			local pos = getObjectPosition(obj)
+
+			if pos and isInSaintsZone(pos) then
+				serverSaintsPresent = true
+				break
+			end
 		end
 	end
 
-	updateAutoJoinPause("Server Saints state changed")
+	updateAutoJoinPause("Zone Saints state changed")
 end
 
 local function monitorPlayerWorkspaceModel(char)
@@ -191,8 +251,9 @@ end
 
 workspace.DescendantAdded:Connect(function(obj)
 	if isSaintsHeldObject(obj) then
-		serverSaintsPresent = true
-		updateAutoJoinPause("Saints part appeared in server: " .. obj.Name)
+		task.defer(function()
+			refreshServerSaintsState()
+		end)
 	end
 end)
 
@@ -402,6 +463,8 @@ local function startAutoJoinLoop()
 			if not autoJoinEnabled then
 				break
 			end
+
+			refreshServerSaintsState()
 
 			if startupDelayActive then
 				print("[Bubble Notifier] Waiting startup cooldown")
@@ -624,8 +687,10 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 			return
 		end
 
+		refreshServerSaintsState()
+
 		if autoJoinPaused then
-			warn("[Bubble Notifier] Teleport blocked because Saints part exists")
+			warn("[Bubble Notifier] Teleport blocked because Saints part is in a zone or held")
 			title.Text = "Bubble Notifier | TP Blocked - Saints Detected"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
 			return
@@ -726,7 +791,7 @@ local function handleWebSocketMessage(msg)
 		title.Text = "Bubble Notifier | Auto Join Delay"
 	elseif autoJoinPaused then
 		if serverSaintsPresent then
-			title.Text = "Bubble Notifier | Paused - Saints In Server"
+			title.Text = "Bubble Notifier | Paused - Saints In Zone"
 		else
 			title.Text = "Bubble Notifier | Paused - Holding Part"
 		end
@@ -783,7 +848,7 @@ local function connectWebSocket()
 		title.Text = "Bubble Notifier | Auto Join Delay"
 	elseif autoJoinPaused then
 		if serverSaintsPresent then
-			title.Text = "Bubble Notifier | Paused - Saints In Server"
+			title.Text = "Bubble Notifier | Paused - Saints In Zone"
 		else
 			title.Text = "Bubble Notifier | Paused - Holding Part"
 		end
