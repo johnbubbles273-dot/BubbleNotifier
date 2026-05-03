@@ -1,4 +1,4 @@
--- Full Bubble Notifier with zone-based Saints-in-server pause
+-- wyd here?
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -30,6 +30,14 @@ local autoJoinQueue = {}
 local serverSaintsPresent = false
 local heldSaintsPresent = false
 
+local DROPS = {
+	SaintsLeftArm = true,
+	SaintsRightArm = true,
+	SaintsLeftLeg = true,
+	SaintsRightLeg = true,
+	SaintsRibcage = true,
+}
+
 local SAINTS_ZONES = {
 	Vector3.new(-5689.33, 103.83, -3266.03),
 	Vector3.new(-7988.94, 67.37, -3212.18),
@@ -50,40 +58,28 @@ local SAINTS_ZONES = {
 	Vector3.new(-7774.09, 49.42, -4513.27),
 }
 
-local ZONE_RADIUS = 250
+local ZONE_RADIUS = 100
+local Y_TOLERANCE = 50
+
+local function isSaintsHeldObject(obj)
+	if not obj then return false end
+	return obj:IsA("BasePart") and DROPS[obj.Name] == true
+end
 
 local function isInSaintsZone(pos)
 	for _, zone in ipairs(SAINTS_ZONES) do
-		if (pos - zone).Magnitude <= ZONE_RADIUS then
+		local horizontalDist = (
+			Vector3.new(pos.X, 0, pos.Z) - Vector3.new(zone.X, 0, zone.Z)
+		).Magnitude
+
+		local yDiff = math.abs(pos.Y - zone.Y)
+
+		if horizontalDist <= ZONE_RADIUS and yDiff <= Y_TOLERANCE then
 			return true
 		end
 	end
+
 	return false
-end
-
-local function getObjectPosition(obj)
-	if not obj then return nil end
-
-	if obj:IsA("BasePart") then
-		return obj.Position
-	end
-
-	if obj:IsA("Model") then
-		if obj.PrimaryPart then
-			return obj.PrimaryPart.Position
-		end
-
-		local part = obj:FindFirstChildWhichIsA("BasePart", true)
-		if part then
-			return part.Position
-		end
-	end
-
-	if obj.Parent and obj.Parent ~= workspace then
-		return getObjectPosition(obj.Parent)
-	end
-
-	return nil
 end
 
 local function saveSettings()
@@ -172,11 +168,6 @@ cooldownLabel.TextSize = 12
 cooldownLabel.TextXAlignment = Enum.TextXAlignment.Right
 cooldownLabel.Parent = topBar
 
-local function isSaintsHeldObject(obj)
-	if not obj then return false end
-	return obj.Name:match("^Saints") ~= nil
-end
-
 local function characterHasSaintsPart(char)
 	if not char then return false end
 
@@ -217,17 +208,13 @@ local function refreshServerSaintsState()
 	serverSaintsPresent = false
 
 	for _, obj in ipairs(workspace:GetDescendants()) do
-		if isSaintsHeldObject(obj) then
-			local pos = getObjectPosition(obj)
-
-			if pos and isInSaintsZone(pos) then
-				serverSaintsPresent = true
-				break
-			end
+		if isSaintsHeldObject(obj) and isInSaintsZone(obj.Position) then
+			serverSaintsPresent = true
+			break
 		end
 	end
 
-	updateAutoJoinPause("Zone Saints state changed")
+	updateAutoJoinPause("Real Saints zone state changed")
 end
 
 local function monitorPlayerWorkspaceModel(char)
@@ -472,7 +459,7 @@ local function startAutoJoinLoop()
 			end
 
 			if autoJoinPaused then
-				print("[Bubble Notifier] Auto Snipe Paused - Saints detected")
+				print("[Bubble Notifier] Auto Snipe Paused - Real Saints in zone or held")
 				continue
 			end
 
@@ -690,7 +677,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 		refreshServerSaintsState()
 
 		if autoJoinPaused then
-			warn("[Bubble Notifier] Teleport blocked because Saints part is in a zone or held")
+			warn("[Bubble Notifier] Teleport blocked because real Saints part is in a zone or held")
 			title.Text = "Bubble Notifier | TP Blocked - Saints Detected"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
 			return
