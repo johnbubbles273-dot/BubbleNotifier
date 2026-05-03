@@ -27,6 +27,9 @@ local autoJoinLoopRunning = false
 local startupDelayActive = false
 local autoJoinQueue = {}
 
+local menuKeybind = Enum.KeyCode.RightAlt
+local rebindingMenuKey = false
+
 local function saveSettings()
 	if makefolder and isfolder and not isfolder(SETTINGS_FOLDER) then
 		makefolder(SETTINGS_FOLDER)
@@ -35,7 +38,8 @@ local function saveSettings()
 	local data =
 		(autoJoinEnabled and "1" or "0") .. "," ..
 		(onlyLeftArm and "1" or "0") .. "," ..
-		(under15Players and "1" or "0")
+		(under15Players and "1" or "0") .. "," ..
+		menuKeybind.Name
 
 	pcall(function()
 		writefile(SETTINGS_FILE, data)
@@ -51,10 +55,25 @@ local function loadSettings()
 	end)
 
 	if success and data then
-		local a, b, c = data:match("([^,]+),([^,]+),?([^,]*)")
+		local a, b, c, d = data:match("([^,]+),([^,]+),([^,]+),?([^,]*)")
+
 		autoJoinEnabled = a == "1"
 		onlyLeftArm = b == "1"
 		under15Players = c == "1"
+
+		if d and d ~= "" then
+			local ok, key = pcall(function()
+				return Enum.KeyCode[d]
+			end)
+
+			if ok and key then
+				menuKeybind = key
+			else
+				menuKeybind = Enum.KeyCode.RightAlt
+			end
+		else
+			menuKeybind = Enum.KeyCode.RightAlt
+		end
 	end
 end
 
@@ -229,6 +248,16 @@ autoTab.Font = Enum.Font.GothamMedium
 autoTab.TextSize = 13
 autoTab.Parent = sidebar
 
+local settingsTab = Instance.new("TextButton")
+settingsTab.Size = UDim2.new(1, 0, 0, 32)
+settingsTab.Position = UDim2.new(0, 0, 0, 84)
+settingsTab.BackgroundTransparency = 1
+settingsTab.Text = "Settings"
+settingsTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+settingsTab.Font = Enum.Font.GothamMedium
+settingsTab.TextSize = 13
+settingsTab.Parent = sidebar
+
 local serverListFrame = Instance.new("ScrollingFrame")
 serverListFrame.Size = UDim2.new(1, -105, 1, -56)
 serverListFrame.Position = UDim2.new(0, 95, 0, 46)
@@ -255,6 +284,52 @@ autoFrame.Position = UDim2.new(0, 95, 0, 46)
 autoFrame.BackgroundTransparency = 1
 autoFrame.Visible = false
 autoFrame.Parent = mainFrame
+
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Size = UDim2.new(1, -105, 1, -56)
+settingsFrame.Position = UDim2.new(0, 95, 0, 46)
+settingsFrame.BackgroundTransparency = 1
+settingsFrame.Visible = false
+settingsFrame.Parent = mainFrame
+
+local keybindRow = Instance.new("TextButton")
+keybindRow.Size = UDim2.new(1, -20, 0, 42)
+keybindRow.Position = UDim2.new(0, 10, 0, 20)
+keybindRow.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+keybindRow.BorderSizePixel = 0
+keybindRow.Text = ""
+keybindRow.AutoButtonColor = false
+keybindRow.Parent = settingsFrame
+
+Instance.new("UICorner", keybindRow).CornerRadius = UDim.new(0, 10)
+
+local keybindLabel = Instance.new("TextLabel")
+keybindLabel.Size = UDim2.new(1, -130, 1, 0)
+keybindLabel.Position = UDim2.new(0, 16, 0, 0)
+keybindLabel.BackgroundTransparency = 1
+keybindLabel.Text = "Menu Hide Keybind"
+keybindLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
+keybindLabel.TextXAlignment = Enum.TextXAlignment.Left
+keybindLabel.Font = Enum.Font.GothamBold
+keybindLabel.TextSize = 13
+keybindLabel.Parent = keybindRow
+
+local keybindValue = Instance.new("TextLabel")
+keybindValue.Size = UDim2.new(0, 100, 1, 0)
+keybindValue.Position = UDim2.new(1, -115, 0, 0)
+keybindValue.BackgroundTransparency = 1
+keybindValue.Text = menuKeybind.Name
+keybindValue.TextColor3 = Color3.fromRGB(180, 180, 180)
+keybindValue.TextXAlignment = Enum.TextXAlignment.Right
+keybindValue.Font = Enum.Font.GothamMedium
+keybindValue.TextSize = 13
+keybindValue.Parent = keybindRow
+
+keybindRow.MouseButton1Click:Connect(function()
+	rebindingMenuKey = true
+	keybindValue.Text = "Press key..."
+	keybindValue.TextColor3 = Color3.fromRGB(255, 180, 80)
+end)
 
 local function createSwitchRow(text, yPos)
 	local row = Instance.new("TextButton")
@@ -492,13 +567,27 @@ local function updateTabs()
 	if currentTab == "Servers" then
 		serversTab.TextColor3 = Color3.fromRGB(255, 255, 255)
 		autoTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+		settingsTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+
 		serverListFrame.Visible = true
 		autoFrame.Visible = false
-	else
+		settingsFrame.Visible = false
+	elseif currentTab == "Auto" then
 		serversTab.TextColor3 = Color3.fromRGB(150, 150, 150)
 		autoTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+		settingsTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+
 		serverListFrame.Visible = false
 		autoFrame.Visible = true
+		settingsFrame.Visible = false
+	else
+		serversTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+		autoTab.TextColor3 = Color3.fromRGB(150, 150, 150)
+		settingsTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+		serverListFrame.Visible = false
+		autoFrame.Visible = false
+		settingsFrame.Visible = true
 	end
 end
 
@@ -510,6 +599,30 @@ end)
 autoTab.MouseButton1Click:Connect(function()
 	currentTab = "Auto"
 	updateTabs()
+end)
+
+settingsTab.MouseButton1Click:Connect(function()
+	currentTab = "Settings"
+	updateTabs()
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+
+	if rebindingMenuKey then
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			menuKeybind = input.KeyCode
+			keybindValue.Text = menuKeybind.Name
+			keybindValue.TextColor3 = Color3.fromRGB(180, 180, 180)
+			rebindingMenuKey = false
+			saveSettings()
+		end
+		return
+	end
+
+	if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == menuKeybind then
+		mainFrame.Visible = not mainFrame.Visible
+	end
 end)
 
 local function removeFromAutoJoinQueue(uniqueID)
