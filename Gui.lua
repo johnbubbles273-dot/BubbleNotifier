@@ -280,11 +280,16 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 85, 1, -36)
-sidebar.Position = UDim2.new(0, 0, 0, 36)
+sidebar.Size = UDim2.new(0, 85, 1, -1)
+sidebar.Position = UDim2.new(0, 0, 0, 0)
 sidebar.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+sidebar.BackgroundTransparency = 0.001
 sidebar.BorderSizePixel = 0
 sidebar.Parent = mainFrame
+
+local sidebarCorner = Instance.new("UICorner")
+sidebarCorner.CornerRadius = UDim.new(0, 14)
+sidebarCorner.Parent = sidebar
 
 local serversTab = Instance.new("TextButton")
 serversTab.Size = UDim2.new(1, 0, 0, 32)
@@ -752,9 +757,13 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	timerLabel.TextXAlignment = Enum.TextXAlignment.Left
 	timerLabel.Parent = entry
 
+	local BUTTON_WIDTH = 55
+	local BUTTON_HEIGHT = 28
+	local BUTTON_SPACING = 5
+
 	local spamBtn = Instance.new("TextButton")
-	spamBtn.Size = UDim2.new(0, 55, 0, 28)
-	spamBtn.Position = UDim2.new(1, -125, 0.5, -14)
+	spamBtn.Size = UDim2.new(0, BUTTON_WIDTH, 0, BUTTON_HEIGHT)
+	spamBtn.Position = UDim2.new(1, -(BUTTON_WIDTH * 2 + BUTTON_SPACING + 10), 0.5, -(BUTTON_HEIGHT / 2))
 	spamBtn.BackgroundColor3 = Color3.fromRGB(220, 55, 55)
 	spamBtn.BorderSizePixel = 0
 	spamBtn.Text = "Spam"
@@ -766,8 +775,8 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	Instance.new("UICorner", spamBtn).CornerRadius = UDim.new(0, 8)
 
 	local joinBtn = Instance.new("TextButton")
-	joinBtn.Size = UDim2.new(0, 55, 0, 28)
-	joinBtn.Position = UDim2.new(1, -65, 0.5, -14)
+	joinBtn.Size = UDim2.new(0, BUTTON_WIDTH, 0, BUTTON_HEIGHT)
+	joinBtn.Position = UDim2.new(1, -(BUTTON_WIDTH + 10), 0.5, -(BUTTON_HEIGHT / 2))
 	joinBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
 	joinBtn.BorderSizePixel = 0
 	joinBtn.Text = "Join"
@@ -775,6 +784,8 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	joinBtn.Font = Enum.Font.GothamBold
 	joinBtn.TextSize = 12
 	joinBtn.Parent = entry
+
+Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 
 	Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 
