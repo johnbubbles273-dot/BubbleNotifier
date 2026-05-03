@@ -811,7 +811,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 		if not canJoin() then return end
 
 		spamJoining = true
-		spamBtn.Text = "0/120"
+		spamBtn.Text = "0/1200"
 		spamBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
 
 		task.spawn(function()
