@@ -598,7 +598,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	timerLabel.Size = UDim2.new(0, 60, 0, 14)
 	timerLabel.Position = UDim2.new(0, 115, 0, 29)
 	timerLabel.BackgroundTransparency = 1
-	timerLabel.Text = "20s"
+	timerLabel.Text = "60s"
 	timerLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 	timerLabel.Font = Enum.Font.Gotham
 	timerLabel.TextSize = 12
@@ -674,7 +674,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	end
 
 	task.spawn(function()
-		for secondsLeft = 20, 1, -1 do
+		for secondsLeft = 60, 1, -1 do
 			if not entry or not entry.Parent then return end
 			timerLabel.Text = tostring(secondsLeft) .. "s"
 			task.wait(1)
