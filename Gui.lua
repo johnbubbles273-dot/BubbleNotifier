@@ -4,8 +4,10 @@ local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 
 local player = Players.LocalPlayer
+
 while not player do
 	task.wait()
 	player = Players.LocalPlayer
@@ -132,6 +134,35 @@ cooldownLabel.TextSize = 12
 cooldownLabel.TextXAlignment = Enum.TextXAlignment.Right
 cooldownLabel.Parent = topBar
 
+local function hideTeleportError()
+	pcall(function()
+		GuiService:ClearError()
+	end)
+end
+
+TeleportService.TeleportInitFailed:Connect(function(_, teleportResult, errorMessage)
+	hideTeleportError()
+
+	warn("[Bubble Notifier] Teleport failed:", teleportResult, errorMessage)
+
+	title.Text = "Bubble Notifier | Join Failed - Retrying"
+	title.TextColor3 = Color3.fromRGB(255, 180, 80)
+
+	task.delay(1.5, function()
+		hideTeleportError()
+
+		if startupDelayActive then
+			title.Text = "Bubble Notifier | Auto Join Delay"
+		elseif autoJoinPaused then
+			title.Text = "Bubble Notifier | Paused - Holding Part"
+			title.TextColor3 = Color3.fromRGB(255, 120, 120)
+		else
+			title.Text = "Bubble Notifier | Connected To Backend API"
+			title.TextColor3 = Color3.fromRGB(200, 200, 200)
+		end
+	end)
+end)
+
 local function startStartupCooldown()
 	startupDelayActive = true
 	title.Text = "Bubble Notifier | Auto Join Delay"
@@ -147,6 +178,7 @@ local function startStartupCooldown()
 		startupDelayActive = false
 		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
 		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
+
 		print("[Bubble Notifier] Startup auto join cooldown finished")
 	end)
 end
@@ -218,6 +250,7 @@ player.CharacterAdded:Connect(function(char)
 	autoJoinPaused = false
 	title.TextColor3 = Color3.fromRGB(200, 200, 200)
 	title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected"
+
 	monitorPlayerWorkspaceModel(char)
 end)
 
@@ -387,6 +420,7 @@ local function isAllowedPart(partName)
 	if onlyLeftArm then
 		return partName == "SaintsLeftArm"
 	end
+
 	return true
 end
 
@@ -394,6 +428,7 @@ local function isAllowedPlayerCount(playerCount)
 	if under15Players then
 		return tonumber(playerCount) and tonumber(playerCount) < 15
 	end
+
 	return true
 end
 
@@ -404,6 +439,7 @@ local function getTopJoinEntry()
 		if item
 			and item.jobId
 			and item.jobId ~= ""
+			and item.jobId ~= game.JobId
 			and serverEntries[item.id]
 			and isAllowedPart(item.partName)
 			and isAllowedPlayerCount(item.playerCount)
@@ -440,6 +476,8 @@ local function startAutoJoinLoop()
 				break
 			end
 
+			hideTeleportError()
+
 			if startupDelayActive then
 				print("[Bubble Notifier] Waiting startup cooldown")
 				continue
@@ -465,6 +503,7 @@ local function startAutoJoinLoop()
 				end)
 
 				if not success then
+					hideTeleportError()
 					warn("[Bubble Notifier] Auto join attempt failed:", err)
 				end
 			else
@@ -501,6 +540,7 @@ end
 
 autoJoinBtn.MouseButton1Click:Connect(function()
 	autoJoinEnabled = not autoJoinEnabled
+
 	saveSettings()
 	refreshAutoButtons()
 
@@ -512,6 +552,7 @@ end)
 
 leftArmBtn.MouseButton1Click:Connect(function()
 	onlyLeftArm = not onlyLeftArm
+
 	saveSettings()
 	refreshAutoButtons()
 
@@ -522,6 +563,7 @@ end)
 
 under15Btn.MouseButton1Click:Connect(function()
 	under15Players = not under15Players
+
 	saveSettings()
 	refreshAutoButtons()
 end)
@@ -617,6 +659,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			rebindingMenuKey = false
 			saveSettings()
 		end
+
 		return
 	end
 
@@ -700,6 +743,13 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 			return
 		end
 
+		if jobId == game.JobId then
+			warn("[Bubble Notifier] Teleport blocked because this is the same server")
+			title.Text = "Bubble Notifier | Already In Server"
+			title.TextColor3 = Color3.fromRGB(255, 180, 80)
+			return
+		end
+
 		if autoJoinPaused then
 			warn("[Bubble Notifier] Teleport blocked because Saints part is held")
 			title.Text = "Bubble Notifier | TP Blocked - Holding Part"
@@ -719,6 +769,7 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 		end)
 
 		if not success then
+			hideTeleportError()
 			warn("[Bubble Notifier] Teleport failed:", err)
 		end
 	end)
@@ -794,11 +845,8 @@ local function handleWebSocketMessage(msg)
 
 	local partName, playerCount, maxPlayers, jobId = parseRawMessage(msg)
 
-	if not partName then
-		return
-	end
+	if not partName then return end
 
-	-- 🔒 Ignore same server
 	if jobId and jobId ~= "" and jobId == game.JobId then
 		print("[Bubble Notifier] Ignored same-server part:", partName, jobId)
 
@@ -863,8 +911,10 @@ local function connectWebSocket()
 	if not success or not socket then
 		warn("[Bubble Notifier] Connection failed:", result)
 		title.Text = "Bubble Notifier | Connection Failed"
+
 		task.wait(5)
 		connectWebSocket()
+
 		return
 	end
 
