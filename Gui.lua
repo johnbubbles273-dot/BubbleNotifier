@@ -93,12 +93,8 @@ mainFrame.Size = UDim2.new(0, 550, 0, 320)
 mainFrame.Position = UDim2.new(0.5, -275, 0.5, -160)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = true
+mainFrame.ClipsDescendants = false
 mainFrame.Parent = screenGui
-
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 14)
-mainCorner.Parent = mainFrame
 
 local sound = Instance.new("Sound")
 sound.SoundId = "rbxassetid://137505070991597"
