@@ -248,6 +248,15 @@ local function startStartupCooldown()
 		startupDelayActive = false
 		updateAutoJoinStatusBox()
 
+		title.Text = "Bubble Notifier | Connected To Backend API"
+	end)
+end
+
+if autoJoinEnabled then
+	startStartupCooldown()
+	startAutoJoinLoop()
+end
+
 		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
 		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
 
@@ -541,7 +550,12 @@ autoJoinBtn.MouseButton1Click:Connect(function()
 			startStartupCooldown()
 		end
 
+		if autoJoinEnabled then
+	task.defer(function()
 		startAutoJoinLoop()
+	end)
+end
+		
 	else
 		startupDelayActive = false
 		updateEntryHighlights(nil)
