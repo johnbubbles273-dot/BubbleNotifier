@@ -95,28 +95,28 @@ mainFrame.Size = UDim2.new(0, 550, 0, 320)
 mainFrame.Position = UDim2.new(0.5, -275, 0.5, -160)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 14)
+mainCorner.Parent = mainFrame
 
 local sound = Instance.new("Sound")
 sound.SoundId = "rbxassetid://137505070991597"
 sound.Volume = 0.5
 sound.Parent = mainFrame
 
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 14)
-
 local topBar = Instance.new("Frame")
 topBar.Name = "TopBar"
 topBar.Size = UDim2.new(1, 0, 0, 36)
 topBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 topBar.BorderSizePixel = 0
+topBar.ClipsDescendants = true
 topBar.Parent = mainFrame
 
-local topCorner = Instance.new("UICorner")
-topCorner.CornerRadius = UDim.new(0, 14)
-topCorner.Parent = topBar
-
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 1, 0)
+title.Size = UDim2.new(1, -180, 1, 0)
 title.Position = UDim2.new(0, 12, 0, 0)
 title.BackgroundTransparency = 1
 title.Text = "Bubble Notifier | Waiting..."
@@ -127,15 +127,35 @@ title.TextSize = 14
 title.Parent = topBar
 
 local cooldownLabel = Instance.new("TextLabel")
-cooldownLabel.Size = UDim2.new(0, 100, 0, 14)
-cooldownLabel.Position = UDim2.new(1, -110, 0, 10)
-cooldownLabel.BackgroundTransparency = 1
-cooldownLabel.Text = ""
-cooldownLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-cooldownLabel.Font = Enum.Font.Gotham
+cooldownLabel.Size = UDim2.new(0, 150, 0, 22)
+cooldownLabel.Position = UDim2.new(1, -160, 0.5, -11)
+cooldownLabel.BackgroundColor3 = autoJoinEnabled and Color3.fromRGB(45, 140, 70) or Color3.fromRGB(160, 55, 55)
+cooldownLabel.BorderSizePixel = 0
+cooldownLabel.Text = autoJoinEnabled and "Auto Join Enabled" or "Auto Join Disabled"
+cooldownLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+cooldownLabel.Font = Enum.Font.GothamBold
 cooldownLabel.TextSize = 12
-cooldownLabel.TextXAlignment = Enum.TextXAlignment.Right
+cooldownLabel.TextXAlignment = Enum.TextXAlignment.Center
 cooldownLabel.Parent = topBar
+
+local statusCorner = Instance.new("UICorner")
+statusCorner.CornerRadius = UDim.new(0, 8)
+statusCorner.Parent = cooldownLabel
+
+local function updateAutoJoinStatusBox()
+	cooldownLabel.Text = autoJoinEnabled and "Auto Join Enabled" or "Auto Join Disabled"
+	cooldownLabel.BackgroundColor3 = autoJoinEnabled and Color3.fromRGB(45, 140, 70) or Color3.fromRGB(160, 55, 55)
+end
+
+local function getDefaultTitle()
+	if startupDelayActive then
+		return "Bubble Notifier | Join Delay"
+	elseif autoJoinPaused then
+		return "Bubble Notifier | Paused - Holding Part"
+	else
+		return "Bubble Notifier | Connected To Backend API"
+	end
+end
 
 local function hideTeleportError()
 	pcall(function()
@@ -155,7 +175,7 @@ TeleportService.TeleportInitFailed:Connect(function(_, teleportResult, errorMess
 		hideTeleportError()
 
 		if startupDelayActive then
-			title.Text = "Bubble Notifier | Auto Join Delay"
+			title.Text = "Bubble Notifier | Join Delay"
 		elseif autoJoinPaused then
 			title.Text = "Bubble Notifier | Paused - Holding Part"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
@@ -168,17 +188,19 @@ end)
 
 local function startStartupCooldown()
 	startupDelayActive = true
-	title.Text = "Bubble Notifier | Auto Join Delay"
-	title.TextColor3 = Color3.fromRGB(200, 200, 200)
+	updateAutoJoinStatusBox()
 
 	task.spawn(function()
 		for i = STARTUP_AUTOJOIN_DELAY, 1, -1 do
-			cooldownLabel.Text = "Wait: " .. i .. "s"
+			title.Text = "Bubble Notifier | Join Delay: " .. i .. "s"
+			title.TextColor3 = Color3.fromRGB(200, 200, 200)
+			updateAutoJoinStatusBox()
 			task.wait(1)
 		end
 
-		cooldownLabel.Text = ""
 		startupDelayActive = false
+		updateAutoJoinStatusBox()
+
 		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
 		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
 
@@ -218,7 +240,7 @@ local function setAutoJoinPaused(state, reason)
 		warn("[Bubble Notifier] Auto join paused:", reason or "Saints part detected")
 	else
 		title.TextColor3 = Color3.fromRGB(200, 200, 200)
-		title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected To Backend API"
+		title.Text = startupDelayActive and "Bubble Notifier | Join Delay" or "Bubble Notifier | Connected To Backend API"
 		warn("[Bubble Notifier] Auto join resumed:", reason or "Saints part removed")
 	end
 end
@@ -252,7 +274,7 @@ end
 player.CharacterAdded:Connect(function(char)
 	autoJoinPaused = false
 	title.TextColor3 = Color3.fromRGB(200, 200, 200)
-	title.Text = startupDelayActive and "Bubble Notifier | Auto Join Delay" or "Bubble Notifier | Connected"
+	title.Text = startupDelayActive and "Bubble Notifier | Join Delay" or "Bubble Notifier | Connected"
 
 	monitorPlayerWorkspaceModel(char)
 end)
@@ -546,6 +568,7 @@ autoJoinBtn.MouseButton1Click:Connect(function()
 
 	saveSettings()
 	refreshAutoButtons()
+	updateAutoJoinStatusBox()
 
 	if autoJoinEnabled then
 		startStartupCooldown()
@@ -572,6 +595,7 @@ under15Btn.MouseButton1Click:Connect(function()
 end)
 
 refreshAutoButtons()
+updateAutoJoinStatusBox()
 
 if autoJoinEnabled then
 	startAutoJoinLoop()
@@ -938,7 +962,7 @@ local function handleWebSocketMessage(msg)
 		print("[Bubble Notifier] Ignored same-server part:", partName, jobId)
 
 		if startupDelayActive then
-			title.Text = "Bubble Notifier | Auto Join Delay"
+			title.Text = "Bubble Notifier | Join Delay"
 		elseif autoJoinPaused then
 			title.Text = "Bubble Notifier | Paused - Holding Part"
 			title.TextColor3 = Color3.fromRGB(255, 120, 120)
@@ -953,7 +977,7 @@ local function handleWebSocketMessage(msg)
 	createServerEntry(partName, jobId or "", playerCount or 0, maxPlayers or 25)
 
 	if startupDelayActive then
-		title.Text = "Bubble Notifier | Auto Join Delay"
+		title.Text = "Bubble Notifier | Join Delay"
 	elseif autoJoinPaused then
 		title.Text = "Bubble Notifier | Paused - Holding Part"
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
@@ -1008,7 +1032,7 @@ local function connectWebSocket()
 	connected = true
 
 	if startupDelayActive then
-		title.Text = "Bubble Notifier | Auto Join Delay"
+		title.Text = "Bubble Notifier | Join Delay"
 	elseif autoJoinPaused then
 		title.Text = "Bubble Notifier | Paused - Holding Part"
 		title.TextColor3 = Color3.fromRGB(255, 120, 120)
