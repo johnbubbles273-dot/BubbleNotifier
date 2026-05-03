@@ -22,7 +22,7 @@ local AUTO_JOIN_RETRY_DELAY = 3
 local STARTUP_AUTOJOIN_DELAY = 60
 
 local SPAM_JOIN_ATTEMPTS = 120
-local SPAM_JOIN_DELAY = 0.15
+local SPAM_JOIN_DELAY = 0.01
 
 local autoJoinEnabled = false
 local onlyLeftArm = false
