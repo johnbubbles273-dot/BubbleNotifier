@@ -113,8 +113,8 @@ topBar.BorderSizePixel = 0
 topBar.Parent = mainFrame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -180, 1, 0)
-title.Position = UDim2.new(0, 12, 0, 0)
+title.Size = UDim2.new(1, -270, 1, 0)
+title.Position = UDim2.new(0, 100, 0, 0)
 title.BackgroundTransparency = 1
 title.Text = "Bubble Notifier | Waiting..."
 title.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -351,7 +351,7 @@ autoTab.Text = "Auto"
 autoTab.TextColor3 = Color3.fromRGB(150, 150, 150)
 autoTab.Font = Enum.Font.GothamMedium
 autoTab.TextSize = 13
-autoTab.Parent = sidebar
+autoTab.Parent = 
 
 local settingsTab = Instance.new("TextButton")
 settingsTab.Size = UDim2.new(1, 0, 0, 32)
@@ -361,7 +361,7 @@ settingsTab.Text = "Settings"
 settingsTab.TextColor3 = Color3.fromRGB(150, 150, 150)
 settingsTab.Font = Enum.Font.GothamMedium
 settingsTab.TextSize = 13
-settingsTab.Parent = sidebar
+settingsTab.Parent = 
 
 local serverListFrame = Instance.new("ScrollingFrame")
 serverListFrame.Size = UDim2.new(1, -105, 1, -56)
