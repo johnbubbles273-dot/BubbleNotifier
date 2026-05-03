@@ -76,8 +76,6 @@ local function loadSettings()
 			else
 				menuKeybind = Enum.KeyCode.RightAlt
 			end
-		else
-			menuKeybind = Enum.KeyCode.RightAlt
 		end
 	end
 end
@@ -112,7 +110,6 @@ topBar.Name = "TopBar"
 topBar.Size = UDim2.new(1, 0, 0, 36)
 topBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 topBar.BorderSizePixel = 0
-topBar.ClipsDescendants = true
 topBar.Parent = mainFrame
 
 local title = Instance.new("TextLabel")
@@ -138,23 +135,11 @@ cooldownLabel.TextSize = 12
 cooldownLabel.TextXAlignment = Enum.TextXAlignment.Center
 cooldownLabel.Parent = topBar
 
-local statusCorner = Instance.new("UICorner")
-statusCorner.CornerRadius = UDim.new(0, 8)
-statusCorner.Parent = cooldownLabel
+Instance.new("UICorner", cooldownLabel).CornerRadius = UDim.new(0, 8)
 
 local function updateAutoJoinStatusBox()
 	cooldownLabel.Text = autoJoinEnabled and "Auto Join Enabled" or "Auto Join Disabled"
 	cooldownLabel.BackgroundColor3 = autoJoinEnabled and Color3.fromRGB(45, 140, 70) or Color3.fromRGB(160, 55, 55)
-end
-
-local function getDefaultTitle()
-	if startupDelayActive then
-		return "Bubble Notifier | Join Delay"
-	elseif autoJoinPaused then
-		return "Bubble Notifier | Paused - Holding Part"
-	else
-		return "Bubble Notifier | Connected To Backend API"
-	end
 end
 
 local function hideTeleportError()
@@ -186,15 +171,81 @@ TeleportService.TeleportInitFailed:Connect(function(_, teleportResult, errorMess
 	end)
 end)
 
+local function startAutoJoinLoop()
+	if autoJoinLoopRunning then return end
+
+	autoJoinLoopRunning = true
+
+	task.spawn(function()
+		while autoJoinEnabled do
+			task.wait(AUTO_JOIN_RETRY_DELAY)
+
+			if not autoJoinEnabled then
+				break
+			end
+
+			hideTeleportError()
+
+			if startupDelayActive then
+				continue
+			end
+
+			if autoJoinPaused then
+				continue
+			end
+
+			local topEntry = nil
+
+			for i = #autoJoinQueue, 1, -1 do
+				local item = autoJoinQueue[i]
+
+				if item
+					and item.jobId
+					and item.jobId ~= ""
+					and item.jobId ~= game.JobId
+				then
+					topEntry = item
+					break
+				end
+			end
+
+			if topEntry then
+				title.Text = "Bubble Notifier | Joining Top Entry..."
+				title.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+				local success, err = pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, topEntry.jobId, player)
+				end)
+
+				if not success then
+					hideTeleportError()
+					warn("[Bubble Notifier] Auto join attempt failed:", err)
+				end
+			else
+				title.Text = "Bubble Notifier | Connected"
+				title.TextColor3 = Color3.fromRGB(200, 200, 200)
+			end
+		end
+
+		autoJoinLoopRunning = false
+	end)
+end
+
 local function startStartupCooldown()
 	startupDelayActive = true
 	updateAutoJoinStatusBox()
 
 	task.spawn(function()
 		for i = STARTUP_AUTOJOIN_DELAY, 1, -1 do
+			if not autoJoinEnabled then
+				startupDelayActive = false
+				updateAutoJoinStatusBox()
+				return
+			end
+
 			title.Text = "Bubble Notifier | Join Delay: " .. i .. "s"
 			title.TextColor3 = Color3.fromRGB(200, 200, 200)
-			updateAutoJoinStatusBox()
+
 			task.wait(1)
 		end
 
@@ -204,12 +255,8 @@ local function startStartupCooldown()
 		title.TextColor3 = autoJoinPaused and Color3.fromRGB(255, 120, 120) or Color3.fromRGB(200, 200, 200)
 		title.Text = autoJoinPaused and "Bubble Notifier | Paused - Holding Part" or "Bubble Notifier | Connected To Backend API"
 
-		print("[Bubble Notifier] Startup auto join cooldown finished")
+		startAutoJoinLoop()
 	end)
-end
-
-if autoJoinEnabled then
-	startStartupCooldown()
 end
 
 local function isSaintsHeldObject(obj)
@@ -280,16 +327,11 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 85, 1, -1)
-sidebar.Position = UDim2.new(0, 0, 0, 0)
+sidebar.Size = UDim2.new(0, 85, 1, -36)
+sidebar.Position = UDim2.new(0, 0, 0, 36)
 sidebar.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-sidebar.BackgroundTransparency = 0.001
 sidebar.BorderSizePixel = 0
 sidebar.Parent = mainFrame
-
-local sidebarCorner = Instance.new("UICorner")
-sidebarCorner.CornerRadius = UDim.new(0, 14)
-sidebarCorner.Parent = sidebar
 
 local serversTab = Instance.new("TextButton")
 serversTab.Size = UDim2.new(1, 0, 0, 32)
@@ -462,89 +504,12 @@ local function isAllowedPlayerCount(playerCount)
 	return true
 end
 
-local function getTopJoinEntry()
-	for i = #autoJoinQueue, 1, -1 do
-		local item = autoJoinQueue[i]
-
-		if item
-			and item.jobId
-			and item.jobId ~= ""
-			and item.jobId ~= game.JobId
-			and serverEntries[item.id]
-			and isAllowedPart(item.partName)
-			and isAllowedPlayerCount(item.playerCount)
-		then
-			return item
-		end
-	end
-
-	return nil
-end
-
 local function updateEntryHighlights(activeID)
 	for id, entryData in pairs(serverEntries) do
 		if entryData.frame then
-			if id == activeID then
-				entryData.frame.BackgroundColor3 = Color3.fromRGB(65, 65, 90)
-			else
-				entryData.frame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-			end
+			entryData.frame.BackgroundColor3 = id == activeID and Color3.fromRGB(65, 65, 90) or Color3.fromRGB(45, 45, 50)
 		end
 	end
-end
-
-local function startAutoJoinLoop()
-	if autoJoinLoopRunning then return end
-
-	autoJoinLoopRunning = true
-
-	task.spawn(function()
-		while autoJoinEnabled do
-			task.wait(AUTO_JOIN_RETRY_DELAY)
-
-			if not autoJoinEnabled then
-				break
-			end
-
-			hideTeleportError()
-
-			if startupDelayActive then
-				print("[Bubble Notifier] Waiting startup cooldown")
-				continue
-			end
-
-			if autoJoinPaused then
-				print("[Bubble Notifier] Auto Snipe Paused, Holding Saints Part")
-				continue
-			end
-
-			local topEntry = getTopJoinEntry()
-
-			if topEntry then
-				updateEntryHighlights(topEntry.id)
-
-				title.Text = "Bubble Notifier | Joining Top Entry..."
-				title.TextColor3 = Color3.fromRGB(200, 200, 200)
-
-				print("[Bubble Notifier] Spam joining top entry:", topEntry.partName, topEntry.jobId)
-
-				local success, err = pcall(function()
-					TeleportService:TeleportToPlaceInstance(game.PlaceId, topEntry.jobId, player)
-				end)
-
-				if not success then
-					hideTeleportError()
-					warn("[Bubble Notifier] Auto join attempt failed:", err)
-				end
-			else
-				updateEntryHighlights(nil)
-				title.Text = "Bubble Notifier | Connected"
-				title.TextColor3 = Color3.fromRGB(200, 200, 200)
-			end
-		end
-
-		autoJoinLoopRunning = false
-	end)
 end
 
 local function updateSwitch(track, knob, enabled)
@@ -576,8 +541,17 @@ autoJoinBtn.MouseButton1Click:Connect(function()
 	updateAutoJoinStatusBox()
 
 	if autoJoinEnabled then
-		startStartupCooldown()
+		if not startupDelayActive then
+			startStartupCooldown()
+		end
+
 		startAutoJoinLoop()
+	else
+		startupDelayActive = false
+		updateEntryHighlights(nil)
+
+		title.Text = "Bubble Notifier | Connected To Backend API"
+		title.TextColor3 = Color3.fromRGB(200, 200, 200)
 	end
 end)
 
@@ -603,6 +577,7 @@ refreshAutoButtons()
 updateAutoJoinStatusBox()
 
 if autoJoinEnabled then
+	startStartupCooldown()
 	startAutoJoinLoop()
 end
 
@@ -785,8 +760,6 @@ local function createServerEntry(partName, jobId, playerCount, maxPlayers)
 	joinBtn.TextSize = 12
 	joinBtn.Parent = entry
 
-Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
-
 	Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 
 	local function canJoin()
@@ -814,6 +787,11 @@ Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 			return false
 		end
 
+		if not isAllowedPlayerCount(playerCount) then
+			warn("[Bubble Notifier] Blocked teleport due to player count filter:", playerCount)
+			return false
+		end
+
 		return true
 	end
 
@@ -821,8 +799,6 @@ Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 		if not canJoin() then
 			return
 		end
-
-		print("[Bubble Notifier] Attempting teleport:", jobId)
 
 		local success, err = pcall(function()
 			TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
@@ -853,17 +829,9 @@ Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 8)
 
 		task.spawn(function()
 			for i = 1, SPAM_JOIN_ATTEMPTS do
-				if not spamJoining then
-					break
-				end
-
-				if not entry or not entry.Parent then
-					break
-				end
-
-				if not canJoin() then
-					break
-				end
+				if not spamJoining then break end
+				if not entry or not entry.Parent then break end
+				if not canJoin() then break end
 
 				spamBtn.Text = tostring(i) .. "/120"
 				title.Text = "Bubble Notifier | Spam Joining " .. tostring(i) .. "/120"
@@ -971,17 +939,6 @@ local function handleWebSocketMessage(msg)
 
 	if jobId and jobId ~= "" and jobId == game.JobId then
 		print("[Bubble Notifier] Ignored same-server part:", partName, jobId)
-
-		if startupDelayActive then
-			title.Text = "Bubble Notifier | Join Delay"
-		elseif autoJoinPaused then
-			title.Text = "Bubble Notifier | Paused - Holding Part"
-			title.TextColor3 = Color3.fromRGB(255, 120, 120)
-		else
-			title.Text = "Bubble Notifier | Ignored Same Server"
-			title.TextColor3 = Color3.fromRGB(200, 200, 200)
-		end
-
 		return
 	end
 
